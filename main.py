@@ -6,7 +6,7 @@ import threading
 from email.mime.text import MIMEText
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, send_file
 from playwright.sync_api import sync_playwright, TimeoutError
 
 load_dotenv()
@@ -15,7 +15,9 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Handshake Bot is running 24/7 with Playwright!"
+    if os.path.exists("latest.png"):
+        return send_file("latest.png", mimetype='image/png')
+    return "Bot is running, but no screenshot available yet! Refresh in 30 seconds."
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -59,17 +61,20 @@ def send_email_alert() -> None:
         log.error("No SMTP_USERNAME provided, skipping email.")
         return
         
-    body = "Handshake Dynamo Task Alert!\n\nA new task is available on your dashboard right now. Go claim it!\n\nLink: " + TASKS_URL
-    msg = MIMEText(body)
-    msg["Subject"] = "[Handshake Alert] NEW TASK AVAILABLE!"
-    msg["From"] = SMTP_USERNAME
-    msg["To"] = ALERT_EMAIL_TO
-    
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_USERNAME, SMTP_PASSWORD)
-        server.send_message(msg)
-    log.info("Alert email sent for new TASK!")
+    try:
+        body = "Handshake Dynamo Task Alert!\n\nA new task is available on your dashboard right now. Go claim it!\n\nLink: " + TASKS_URL
+        msg = MIMEText(body)
+        msg["Subject"] = "[Handshake Alert] NEW TASK AVAILABLE!"
+        msg["From"] = SMTP_USERNAME
+        msg["To"] = ALERT_EMAIL_TO
+        
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+        log.info("Alert email sent successfully!")
+    except Exception as e:
+        log.error(f"Failed to send email: {e}")
 
 def run_browser_check(previously_had_tasks: bool) -> bool:
     currently_has_tasks = previously_had_tasks
@@ -77,7 +82,8 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 720}
         )
         
         domain = "ai.joinhandshake.com"
@@ -87,6 +93,11 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
         page = context.new_page()
         try:
             page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
+            
+            # Save screenshot for debugging
+            page.screenshot(path="latest.png", full_page=True)
+            log.info("Screenshot saved. Check the Render URL to see what the bot sees.")
+            
             visible_text = page.locator("body").inner_text().lower()
             
             if "sign in" in visible_text or "log in" in visible_text or "forgot password" in visible_text:
