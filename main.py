@@ -86,6 +86,9 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             viewport={'width': 1280, 'height': 720}
         )
         
+        # Mask webdriver to prevent basic bot detection that might cause infinite loading
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
         domain = "ai.joinhandshake.com"
         cookie_list = parse_cookies(SESSION_COOKIE, domain)
         context.add_cookies(cookie_list)
@@ -98,8 +101,19 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
         try:
             page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
             
-            # Wait 20 extra seconds for React to finish rendering
-            page.wait_for_timeout(20000)
+            # Wait for basic layout to load
+            page.wait_for_timeout(5000)
+            
+            # Click the 'Available tasks' tab!
+            try:
+                # The text on the tab is 'Available tasks'
+                page.click("text='Available tasks'", timeout=10000)
+                log.info("Successfully clicked the 'Available tasks' tab.")
+            except Exception as e:
+                log.warning("Could not click 'Available tasks' tab. It might not be loaded.")
+            
+            # Wait 15 extra seconds for React to fetch and render the new tab
+            page.wait_for_timeout(15000)
             
             # Save screenshot for debugging
             page.screenshot(path="latest.png", full_page=True)
