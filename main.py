@@ -91,11 +91,15 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
         context.add_cookies(cookie_list)
         
         page = context.new_page()
+        
+        # Intercept and print console messages from the browser to see if there are JS errors
+        page.on("console", lambda msg: log.info(f"Browser Console: {msg.text}"))
+        
         try:
             page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
             
-            # Wait 10 extra seconds for React to finish rendering (Skeleton loaders to disappear)
-            page.wait_for_timeout(10000)
+            # Wait 20 extra seconds for React to finish rendering
+            page.wait_for_timeout(20000)
             
             # Save screenshot for debugging
             page.screenshot(path="latest.png", full_page=True)
