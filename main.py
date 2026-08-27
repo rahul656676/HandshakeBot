@@ -62,6 +62,7 @@ def send_email_alert() -> None:
         return
         
     try:
+        log.info(f"Attempting to send email from {SMTP_USERNAME} to {ALERT_EMAIL_TO} via {SMTP_HOST}:{SMTP_PORT}...")
         body = "Handshake Dynamo Task Alert!\n\nA new task is available on your dashboard right now. Go claim it!\n\nLink: " + TASKS_URL
         msg = MIMEText(body)
         msg["Subject"] = "[Handshake Alert] NEW TASK AVAILABLE!"
@@ -69,8 +70,11 @@ def send_email_alert() -> None:
         msg["To"] = ALERT_EMAIL_TO
         
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            log.info("SMTP Connection established. Starting TLS...")
             server.starttls()
+            log.info("TLS started. Logging in...")
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            log.info("Logged in successfully. Sending message...")
             server.send_message(msg)
         log.info("Alert email sent successfully!")
     except Exception as e:
@@ -104,16 +108,23 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             # Wait for basic layout to load
             page.wait_for_timeout(5000)
             
+            # Dismiss the 'Got it' tooltip if it exists
+            try:
+                page.click("text='Got it'", timeout=3000)
+                log.info("Dismissed tooltip.")
+                page.wait_for_timeout(1000)
+            except:
+                pass
+            
             # Click the 'Available tasks' tab!
             try:
-                # The text on the tab is 'Available tasks'
                 page.click("text='Available tasks'", timeout=10000)
                 log.info("Successfully clicked the 'Available tasks' tab.")
             except Exception as e:
-                log.warning("Could not click 'Available tasks' tab. It might not be loaded.")
+                log.warning(f"Could not click 'Available tasks' tab: {e}")
             
-            # Wait 15 extra seconds for React to fetch and render the new tab
-            page.wait_for_timeout(15000)
+            # Wait 10 extra seconds for React to fetch and render the new tab
+            page.wait_for_timeout(10000)
             
             # Save screenshot for debugging
             page.screenshot(path="latest.png", full_page=True)
