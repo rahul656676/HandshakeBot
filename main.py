@@ -1,9 +1,8 @@
 import os
 import time
 import logging
-import smtplib
 import threading
-from email.mime.text import MIMEText
+import requests
 
 from dotenv import load_dotenv
 from flask import Flask, send_file
@@ -37,11 +36,8 @@ TASKS_URL = os.environ.get("HANDSHAKE_TASKS_URL", "https://ai.joinhandshake.com/
 SESSION_COOKIE = os.environ.get("HANDSHAKE_SESSION_COOKIE", "")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
 
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-ALERT_EMAIL_TO = os.environ.get("ALERT_EMAIL_TO", "")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 def parse_cookies(cookie_string, domain):
     cookies = []
@@ -56,29 +52,28 @@ def parse_cookies(cookie_string, domain):
             })
     return cookies
 
-def send_email_alert() -> None:
-    if not SMTP_USERNAME:
-        log.error("No SMTP_USERNAME provided, skipping email.")
+def send_telegram_alert() -> None:
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        log.error("Telegram credentials missing, skipping alert.")
         return
         
     try:
-        log.info(f"Attempting to send email from {SMTP_USERNAME} to {ALERT_EMAIL_TO} via {SMTP_HOST}:{SMTP_PORT}...")
-        body = "Handshake Dynamo Task Alert!\n\nA new task is available on your dashboard right now. Go claim it!\n\nLink: " + TASKS_URL
-        msg = MIMEText(body)
-        msg["Subject"] = "[Handshake Alert] NEW TASK AVAILABLE!"
-        msg["From"] = SMTP_USERNAME
-        msg["To"] = ALERT_EMAIL_TO
-        
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            log.info("SMTP Connection established. Starting TLS...")
-            server.starttls()
-            log.info("TLS started. Logging in...")
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            log.info("Logged in successfully. Sending message...")
-            server.send_message(msg)
-        log.info("Alert email sent successfully!")
+        log.info(f"Attempting to send Telegram alert to chat ID: {TELEGRAM_CHAT_ID}...")
+        body = "🚨 *Handshake Dynamo Task Alert!* 🚨\n\nA new task is available on your dashboard right now. Go claim it!\n\n🔗 [Click here to go to Tasks](" + TASKS_URL + ")"
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": body,
+            "parse_mode": "Markdown",
+            "disable_web_page_preview": True
+        }
+        resp = requests.post(url, json=payload, timeout=10)
+        if resp.status_code == 200:
+            log.info("Telegram alert sent successfully!")
+        else:
+            log.error(f"Failed to send Telegram alert: {resp.status_code} - {resp.text}")
     except Exception as e:
-        log.error(f"Failed to send email: {e}")
+        log.error(f"Failed to send Telegram alert: {e}")
 
 def run_browser_check(previously_had_tasks: bool) -> bool:
     currently_has_tasks = previously_had_tasks
@@ -123,8 +118,8 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             except Exception as e:
                 log.warning(f"Could not click 'Available tasks' tab: {e}")
             
-            # Wait 10 extra seconds for React to fetch and render the new tab
-            page.wait_for_timeout(10000)
+            # Wait 15 extra seconds for React to fetch and render the new tab
+            page.wait_for_timeout(15000)
             
             # Save screenshot for debugging
             page.screenshot(path="latest.png", full_page=True)
@@ -154,8 +149,8 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             browser.close()
 
     if currently_has_tasks and not previously_had_tasks:
-        log.info("🎯 DETECTED NEW TASKS! Sending email alert...")
-        send_email_alert()
+        log.info("🎯 DETECTED NEW TASKS! Sending Telegram alert...")
+        send_telegram_alert()
     elif currently_has_tasks and previously_had_tasks:
         log.info("Tasks are still available, waiting for you to claim them.")
     else:
