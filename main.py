@@ -132,9 +132,22 @@ def run_monitor():
                 # Click the 'Available tasks' tab via raw JS (safest against Playwright locator bugs)
                 try:
                     clicked = page.evaluate('''() => {
-                        const tabs = Array.from(document.querySelectorAll('*')).filter(el => el.textContent && el.textContent.trim() === 'Available tasks');
+                        const tabs = Array.from(document.querySelectorAll('button, a, div, span, li, [role="tab"]')).filter(el => {
+                            const text = (el.textContent || '').toLowerCase().trim().replace(/\\s+/g, ' ');
+                            return text === 'available tasks' || text.includes('available tasks');
+                        });
+                        
+                        // Sort by least children to get the innermost element
+                        tabs.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length);
+                        
                         if (tabs.length > 0) {
-                            tabs[tabs.length - 1].click();
+                            tabs[0].click();
+                            // In React, sometimes the event listener is on the parent
+                            if (tabs[0].closest('button, [role="tab"]')) {
+                                tabs[0].closest('button, [role="tab"]').click();
+                            } else if (tabs[0].parentElement) {
+                                tabs[0].parentElement.click();
+                            }
                             return true;
                         }
                         return false;
