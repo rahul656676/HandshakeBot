@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import logging
 import threading
@@ -129,33 +130,22 @@ def run_monitor():
                 except:
                     pass
                 
-                # Click the 'Available tasks' tab via raw JS (safest against Playwright locator bugs)
+                # Click the 'Available tasks' tab natively with Playwright (force=True bypasses tooltips)
+                # This ensures React receives all mousedown/mouseup events!
                 try:
-                    clicked = page.evaluate('''() => {
-                        const tabs = Array.from(document.querySelectorAll('button, a, div, span, li, [role="tab"]')).filter(el => {
-                            const text = (el.textContent || '').toLowerCase().trim().replace(/\\s+/g, ' ');
-                            return text === 'available tasks' || text.includes('available tasks');
-                        });
-                        
-                        // Sort by least children to get the innermost element
-                        tabs.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length);
-                        
-                        if (tabs.length > 0) {
-                            tabs[0].click();
-                            // In React, sometimes the event listener is on the parent
-                            if (tabs[0].closest('button, [role="tab"]')) {
-                                tabs[0].closest('button, [role="tab"]').click();
-                            } else if (tabs[0].parentElement) {
-                                tabs[0].parentElement.click();
-                            }
-                            return true;
-                        }
-                        return false;
-                    }''')
-                    if clicked:
-                        log.info("Clicked 'Available tasks' tab via raw JS.")
+                    # 1. Try to find the exact tab role first
+                    tab_locator = page.get_by_role("tab", name=re.compile(r"available tasks", re.IGNORECASE))
+                    if tab_locator.count() > 0:
+                        tab_locator.first.click(force=True, timeout=5000)
+                        log.info("Clicked 'Available tasks' tab via get_by_role.")
                     else:
-                        log.warning("Could not find 'Available tasks' tab in DOM to click.")
+                        # 2. Fallback to finding the text anywhere in the DOM
+                        fallback_locator = page.locator("text=/(?i)available tasks/")
+                        if fallback_locator.count() > 0:
+                            fallback_locator.last.click(force=True, timeout=5000)
+                            log.info("Clicked 'Available tasks' tab via text fallback.")
+                        else:
+                            log.warning("Could not find 'Available tasks' tab using Playwright locators.")
                 except Exception as e:
                     log.warning(f"Error clicking 'Available tasks' tab: {e}")
                 
