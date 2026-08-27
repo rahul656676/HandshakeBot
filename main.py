@@ -118,7 +118,7 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             
             # Click the 'Available tasks' tab!
             try:
-                page.click("text='Available tasks'", timeout=10000)
+                page.get_by_text("Available tasks").last.click(force=True, timeout=10000)
                 log.info("Successfully clicked the 'Available tasks' tab.")
             except Exception as e:
                 log.warning(f"Could not click 'Available tasks' tab: {e}")
