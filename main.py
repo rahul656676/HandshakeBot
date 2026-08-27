@@ -75,107 +75,93 @@ def send_telegram_alert() -> None:
     except Exception as e:
         log.error(f"Failed to send Telegram alert: {e}")
 
-def run_browser_check(previously_had_tasks: bool) -> bool:
-    currently_has_tasks = previously_had_tasks
+def run_monitor():
+    keep_alive()
+    log.info("Starting Playwright Browser monitor. Polling every %ds...", POLL_INTERVAL)
     
     with sync_playwright() as p:
+        log.info("Launching Chromium once...")
         browser = p.chromium.launch(
             headless=True,
             args=[
                 "--disable-dev-shm-usage",
                 "--no-sandbox",
-                "--disable-gpu",
-                "--disable-background-networking",
-                "--disable-background-timer-throttling",
-                "--disable-backgrounding-occluded-windows",
-                "--disable-renderer-backgrounding"
+                "--disable-gpu"
             ]
         )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
             viewport={'width': 1280, 'height': 720}
         )
-        
-        # Mask webdriver to prevent basic bot detection that might cause infinite loading
         context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
         domain = "ai.joinhandshake.com"
-        cookie_list = parse_cookies(SESSION_COOKIE, domain)
-        context.add_cookies(cookie_list)
+        context.add_cookies(parse_cookies(SESSION_COOKIE, domain))
         
         page = context.new_page()
-        
-        # Intercept and print console messages from the browser to see if there are JS errors
         page.on("console", lambda msg: log.info(f"Browser Console: {msg.text}"))
         
-        try:
-            page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
-            
-            # Wait for basic layout to load
-            page.wait_for_timeout(5000)
-            
-            # Dismiss the 'Got it' tooltip if it exists using pure JS
+        had_tasks = False
+        
+        while True:
             try:
-                page.locator("text='Got it'").first.evaluate("node => node.click()")
-                log.info("Dismissed tooltip via JS.")
-                page.wait_for_timeout(1000)
-            except:
-                pass
-            
-            # Click the 'Available tasks' tab using pure JS!
-            try:
-                page.locator("text='Available tasks'").last.evaluate("node => node.click()")
-                log.info("Successfully clicked the 'Available tasks' tab via JS.")
+                log.info("--- Starting new check cycle ---")
+                page.goto(TASKS_URL, timeout=45000, wait_until="domcontentloaded")
+                
+                # Wait for React to render
+                page.wait_for_timeout(5000)
+                
+                # Dismiss the 'Got it' tooltip if it exists
+                try:
+                    page.locator("text='Got it'").first.evaluate("node => node.click()", timeout=2000)
+                except:
+                    pass
+                
+                # Click the 'Available tasks' tab
+                try:
+                    page.locator("text='Available tasks'").last.evaluate("node => node.click()", timeout=5000)
+                    log.info("Clicked 'Available tasks' tab.")
+                except Exception as e:
+                    log.warning(f"Could not click 'Available tasks' tab: {e}")
+                
+                # Wait for new tab to render
+                page.wait_for_timeout(8000)
+                
+                # Save screenshot
+                try:
+                    page.screenshot(path="latest.png")
+                except Exception as e:
+                    log.warning(f"Screenshot failed: {e}")
+                
+                visible_text = page.locator("body").inner_text().lower()
+                
+                if "sign in" in visible_text or "log in" in visible_text or "forgot password" in visible_text:
+                    log.error("🚨 ALERT: Session Expired! Please update your Cookie in .env")
+                elif "captcha" in visible_text or "cloudflare" in visible_text:
+                    log.error("🚨 ALERT: Handshake showing Captcha! Bot is blocked.")
+                else:
+                    currently_has_tasks = "claim" in visible_text
+                    
+                    if currently_has_tasks and not had_tasks:
+                        log.info("🎯 DETECTED NEW TASKS! Sending Telegram alert...")
+                        send_telegram_alert()
+                    elif currently_has_tasks and had_tasks:
+                        log.info("Tasks are still available, waiting for you to claim them.")
+                    else:
+                        log.info("No available tasks right now. (Checked with Browser)")
+                        
+                    had_tasks = currently_has_tasks
+                    
+            except TimeoutError:
+                log.warning("Page load timed out, will retry next cycle.")
             except Exception as e:
-                log.warning(f"Could not click 'Available tasks' tab: {e}")
-            
-            # Wait 15 extra seconds for React to fetch and render the new tab
-            page.wait_for_timeout(15000)
-            
-            # Save screenshot for debugging
-            page.screenshot(path="latest.png")
-            log.info("Screenshot saved. Check the Render URL to see what the bot sees.")
-            
-            visible_text = page.locator("body").inner_text().lower()
-            
-            if "sign in" in visible_text or "log in" in visible_text or "forgot password" in visible_text:
-                log.error("🚨 ALERT: Session Expired! Please update your Cookie in .env")
-                return previously_had_tasks
+                log.error(f"Error during browser check: {e}")
                 
-            if "captcha" in visible_text or "cloudflare" in visible_text:
-                log.error("🚨 ALERT: Handshake showing Captcha! Bot is blocked.")
-                return previously_had_tasks
-                
-            # POSITIVE CHECK: Only assume task exists if 'claim' is visible on the screen
-            if "claim" in visible_text:
-                currently_has_tasks = True
-            else:
-                currently_has_tasks = False
-        except TimeoutError:
-            log.warning("Page load timed out, will retry next cycle.")
-            return previously_had_tasks
-        except Exception as e:
-            log.error(f"Error during browser check: {e}")
-            return previously_had_tasks
-        finally:
-            browser.close()
-
-    if currently_has_tasks and not previously_had_tasks:
-        log.info("🎯 DETECTED NEW TASKS! Sending Telegram alert...")
-        send_telegram_alert()
-    elif currently_has_tasks and previously_had_tasks:
-        log.info("Tasks are still available, waiting for you to claim them.")
-    else:
-        log.info("No available tasks right now. (Checked with Browser)")
-    return currently_has_tasks
+            log.info(f"Sleeping for {POLL_INTERVAL} seconds...")
+            time.sleep(POLL_INTERVAL)
 
 def main():
-    keep_alive()
-    log.info("Starting Playwright Browser monitor. Polling every %ds...", POLL_INTERVAL)
-    had_tasks = False
-    while True:
-        had_tasks = run_browser_check(had_tasks)
-        time.sleep(POLL_INTERVAL)
+    run_monitor()
 
 if __name__ == "__main__":
     main()
