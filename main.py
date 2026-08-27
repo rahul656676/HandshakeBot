@@ -106,10 +106,13 @@ def run_monitor():
         while True:
             try:
                 log.info("--- Starting new check cycle ---")
-                page.goto(TASKS_URL, timeout=45000, wait_until="domcontentloaded")
+                page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
                 
-                # Wait for React to render
-                page.wait_for_timeout(5000)
+                # Wait up to 15 seconds for React to finish skeleton loaders and show the tabs
+                try:
+                    page.wait_for_selector("text='Available tasks'", timeout=15000)
+                except:
+                    log.warning("Tabs didn't load in time. Might be stuck on skeleton loader.")
                 
                 # Dismiss the 'Got it' tooltip if it exists
                 try:
