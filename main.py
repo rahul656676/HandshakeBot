@@ -114,38 +114,19 @@ def run_monitor():
             try:
                 page.goto(TASKS_URL, timeout=45000, wait_until="domcontentloaded")
                 
-                # Wait up to 20 seconds for the React app to render the tabs
-                try:
-                    page.wait_for_selector("text=Available tasks", state="visible", timeout=20000)
-                    log.info("React tabs rendered successfully.")
-                except:
-                    log.warning("Tabs didn't become visible in 20s. Proceeding anyway...")
+                # Give React 10 full seconds to fetch data and remove skeleton loaders
+                page.wait_for_timeout(10000)
                 
-                # Dismiss tooltip via raw JS
+                # Dismiss tooltip via JS exactly like before
                 try:
-                    page.evaluate('''() => {
-                        const gotIt = Array.from(document.querySelectorAll('*')).find(el => el.textContent && el.textContent.trim() === 'Got it');
-                        if (gotIt) gotIt.click();
-                    }''')
+                    page.locator("text='Got it'").first.evaluate("node => node.click()", timeout=2000)
                 except:
                     pass
                 
-                # Click the 'Available tasks' tab natively with Playwright (force=True bypasses tooltips)
-                # This ensures React receives all mousedown/mouseup events!
+                # Click the 'Available tasks' tab via evaluate (EXACTLY what worked at 17:14)
                 try:
-                    # 1. Try to find the exact tab role first
-                    tab_locator = page.get_by_role("tab", name=re.compile(r"available tasks", re.IGNORECASE))
-                    if tab_locator.count() > 0:
-                        tab_locator.first.click(force=True, timeout=5000)
-                        log.info("Clicked 'Available tasks' tab via get_by_role.")
-                    else:
-                        # 2. Fallback to finding the text anywhere in the DOM
-                        fallback_locator = page.locator("text=/(?i)available tasks/")
-                        if fallback_locator.count() > 0:
-                            fallback_locator.last.click(force=True, timeout=5000)
-                            log.info("Clicked 'Available tasks' tab via text fallback.")
-                        else:
-                            log.warning("Could not find 'Available tasks' tab using Playwright locators.")
+                    page.locator("text='Available tasks'").last.evaluate("node => node.click()", timeout=5000)
+                    log.info("Clicked 'Available tasks' tab via JS evaluate.")
                 except Exception as e:
                     log.warning(f"Error clicking 'Available tasks' tab: {e}")
                 
