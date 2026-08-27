@@ -122,23 +122,23 @@ def run_monitor():
                 
                 # Dismiss tooltip via raw JS
                 try:
-                    page.evaluate('''
+                    page.evaluate('''() => {
                         const gotIt = Array.from(document.querySelectorAll('*')).find(el => el.textContent && el.textContent.trim() === 'Got it');
                         if (gotIt) gotIt.click();
-                    ''')
+                    }''')
                 except:
                     pass
                 
                 # Click the 'Available tasks' tab via raw JS (safest against Playwright locator bugs)
                 try:
-                    clicked = page.evaluate('''
+                    clicked = page.evaluate('''() => {
                         const tabs = Array.from(document.querySelectorAll('*')).filter(el => el.textContent && el.textContent.trim() === 'Available tasks');
                         if (tabs.length > 0) {
                             tabs[tabs.length - 1].click();
                             return true;
                         }
                         return false;
-                    ''')
+                    }''')
                     if clicked:
                         log.info("Clicked 'Available tasks' tab via raw JS.")
                     else:
