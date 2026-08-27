@@ -111,26 +111,40 @@ def run_monitor():
             page = context.new_page()
             
             try:
-                page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
+                page.goto(TASKS_URL, timeout=45000, wait_until="domcontentloaded")
                 
-                # Wait up to 15 seconds for React to finish skeleton loaders and show the tabs
+                # Wait up to 20 seconds for the React app to render the tabs
                 try:
-                    page.wait_for_selector("text='Available tasks'", timeout=15000)
+                    page.wait_for_selector("text=Available tasks", state="visible", timeout=20000)
+                    log.info("React tabs rendered successfully.")
                 except:
-                    log.warning("Tabs didn't load in time. Might be stuck on skeleton loader.")
+                    log.warning("Tabs didn't become visible in 20s. Proceeding anyway...")
                 
-                # Dismiss the 'Got it' tooltip if it exists
+                # Dismiss tooltip via raw JS
                 try:
-                    page.locator("text='Got it'").first.evaluate("node => node.click()", timeout=2000)
+                    page.evaluate('''
+                        const gotIt = Array.from(document.querySelectorAll('*')).find(el => el.textContent && el.textContent.trim() === 'Got it');
+                        if (gotIt) gotIt.click();
+                    ''')
                 except:
                     pass
                 
-                # Click the 'Available tasks' tab
+                # Click the 'Available tasks' tab via raw JS (safest against Playwright locator bugs)
                 try:
-                    page.locator("text='Available tasks'").last.evaluate("node => node.click()", timeout=5000)
-                    log.info("Clicked 'Available tasks' tab.")
+                    clicked = page.evaluate('''
+                        const tabs = Array.from(document.querySelectorAll('*')).filter(el => el.textContent && el.textContent.trim() === 'Available tasks');
+                        if (tabs.length > 0) {
+                            tabs[tabs.length - 1].click();
+                            return true;
+                        }
+                        return false;
+                    ''')
+                    if clicked:
+                        log.info("Clicked 'Available tasks' tab via raw JS.")
+                    else:
+                        log.warning("Could not find 'Available tasks' tab in DOM to click.")
                 except Exception as e:
-                    log.warning(f"Could not click 'Available tasks' tab: {e}")
+                    log.warning(f"Error clicking 'Available tasks' tab: {e}")
                 
                 # Wait for new tab to render
                 page.wait_for_timeout(8000)
