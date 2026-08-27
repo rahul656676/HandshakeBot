@@ -69,7 +69,7 @@ def send_email_alert() -> None:
         msg["From"] = SMTP_USERNAME
         msg["To"] = ALERT_EMAIL_TO
         
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
             log.info("SMTP Connection established. Starting TLS...")
             server.starttls()
             log.info("TLS started. Logging in...")
@@ -110,7 +110,7 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             
             # Dismiss the 'Got it' tooltip if it exists using pure JS
             try:
-                page.evaluate("Array.from(document.querySelectorAll('button, span, div')).find(el => el.textContent.trim() === 'Got it')?.click()")
+                page.locator("text='Got it'").first.evaluate("node => node.click()")
                 log.info("Dismissed tooltip via JS.")
                 page.wait_for_timeout(1000)
             except:
@@ -118,7 +118,7 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             
             # Click the 'Available tasks' tab using pure JS!
             try:
-                page.evaluate("Array.from(document.querySelectorAll('button, a, span, div')).find(el => el.textContent.trim() === 'Available tasks')?.click()")
+                page.locator("text='Available tasks'").last.evaluate("node => node.click()")
                 log.info("Successfully clicked the 'Available tasks' tab via JS.")
             except Exception as e:
                 log.warning(f"Could not click 'Available tasks' tab: {e}")
