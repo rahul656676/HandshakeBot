@@ -108,18 +108,18 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             # Wait for basic layout to load
             page.wait_for_timeout(5000)
             
-            # Dismiss the 'Got it' tooltip if it exists
+            # Dismiss the 'Got it' tooltip if it exists using pure JS
             try:
-                page.click("text='Got it'", timeout=3000)
-                log.info("Dismissed tooltip.")
+                page.evaluate("Array.from(document.querySelectorAll('button, span, div')).find(el => el.textContent.trim() === 'Got it')?.click()")
+                log.info("Dismissed tooltip via JS.")
                 page.wait_for_timeout(1000)
             except:
                 pass
             
-            # Click the 'Available tasks' tab!
+            # Click the 'Available tasks' tab using pure JS!
             try:
-                page.get_by_text("Available tasks").last.click(force=True, timeout=10000)
-                log.info("Successfully clicked the 'Available tasks' tab.")
+                page.evaluate("Array.from(document.querySelectorAll('button, a, span, div')).find(el => el.textContent.trim() === 'Available tasks')?.click()")
+                log.info("Successfully clicked the 'Available tasks' tab via JS.")
             except Exception as e:
                 log.warning(f"Could not click 'Available tasks' tab: {e}")
             
