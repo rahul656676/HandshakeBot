@@ -133,7 +133,7 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
             page.wait_for_timeout(15000)
             
             # Save screenshot for debugging
-            page.screenshot(path="latest.png", full_page=True)
+            page.screenshot(path="latest.png")
             log.info("Screenshot saved. Check the Render URL to see what the bot sees.")
             
             visible_text = page.locator("body").inner_text().lower()
