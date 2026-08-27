@@ -135,10 +135,11 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
                 log.error("🚨 ALERT: Handshake showing Captcha! Bot is blocked.")
                 return previously_had_tasks
                 
-            if "no results" in visible_text or "cannot start tasks until grading is complete" in visible_text:
-                currently_has_tasks = False
-            else:
+            # POSITIVE CHECK: Only assume task exists if 'claim' is visible on the screen
+            if "claim" in visible_text:
                 currently_has_tasks = True
+            else:
+                currently_has_tasks = False
         except TimeoutError:
             log.warning("Page load timed out, will retry next cycle.")
             return previously_had_tasks
