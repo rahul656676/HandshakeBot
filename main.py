@@ -112,7 +112,7 @@ def run_monitor():
             page = context.new_page()
             
             try:
-                page.goto(TASKS_URL, timeout=45000, wait_until="domcontentloaded")
+                page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
                 
                 # Give React 10 full seconds to fetch data and remove skeleton loaders
                 page.wait_for_timeout(10000)
