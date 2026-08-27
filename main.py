@@ -86,26 +86,31 @@ def run_monitor():
             args=[
                 "--disable-dev-shm-usage",
                 "--no-sandbox",
-                "--disable-gpu"
+                "--disable-gpu",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding"
             ]
         )
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-            viewport={'width': 1280, 'height': 720}
-        )
-        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
-        domain = "ai.joinhandshake.com"
-        context.add_cookies(parse_cookies(SESSION_COOKIE, domain))
-        
-        page = context.new_page()
-        page.on("console", lambda msg: log.info(f"Browser Console: {msg.text}"))
         
         had_tasks = False
         
         while True:
+            log.info("--- Starting new check cycle ---")
+            
+            # Create a fresh context and page every cycle to prevent Memory Leaks!
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+                viewport={'width': 1280, 'height': 720}
+            )
+            context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            domain = "ai.joinhandshake.com"
+            context.add_cookies(parse_cookies(SESSION_COOKIE, domain))
+            
+            page = context.new_page()
+            
             try:
-                log.info("--- Starting new check cycle ---")
                 page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
                 
                 # Wait up to 15 seconds for React to finish skeleton loaders and show the tabs
@@ -133,8 +138,8 @@ def run_monitor():
                 # Save screenshot
                 try:
                     page.screenshot(path="latest.png")
-                except Exception as e:
-                    log.warning(f"Screenshot failed: {e}")
+                except:
+                    pass
                 
                 visible_text = page.locator("body").inner_text().lower()
                 
@@ -159,6 +164,9 @@ def run_monitor():
                 log.warning("Page load timed out, will retry next cycle.")
             except Exception as e:
                 log.error(f"Error during browser check: {e}")
+            finally:
+                # CLOSE the context to FREE ALL MEMORY
+                context.close()
                 
             log.info(f"Sleeping for {POLL_INTERVAL} seconds...")
             time.sleep(POLL_INTERVAL)
