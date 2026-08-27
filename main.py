@@ -94,6 +94,9 @@ def run_browser_check(previously_had_tasks: bool) -> bool:
         try:
             page.goto(TASKS_URL, timeout=45000, wait_until="networkidle")
             
+            # Wait 10 extra seconds for React to finish rendering (Skeleton loaders to disappear)
+            page.wait_for_timeout(10000)
+            
             # Save screenshot for debugging
             page.screenshot(path="latest.png", full_page=True)
             log.info("Screenshot saved. Check the Render URL to see what the bot sees.")
